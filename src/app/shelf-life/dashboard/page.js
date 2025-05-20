@@ -1,207 +1,278 @@
 "use client";
 
-import { useState } from "react";
-import DashboardNav from "@/app/components/shared/DashboardNav";
-import DashboardSidebar from "@/app/components/shared/DashboardSidebar";
-import AdminLayout from "@/app/components/shared/AdminLayout";
+import { useState, useEffect, useCallback } from 'react';
+import DashboardLayout from '@/components/layout/DashboardLayout';
+import { FaCalendar, FaClock, FaCheckCircle, FaFlask } from 'react-icons/fa';
 
-const dummyAppointments = [
+const statConfig = [
   {
-    id: 1,
-    productName: "Organic Fruit Juice",
-    company: "Natural Foods Inc.",
-    weight: "500ml",
-    requestDate: "4/1/2025",
-    status: "Pending",
-    contactPerson: "John Smith"
+    key: 'total_appointments',
+    label: 'Total Appointments',
+    icon: <FaCalendar className="text-blue-500 w-8 h-8" />, 
+    colorClass: ''
   },
   {
-    id: 2,
-    productName: "Vitamin Supplement",
-    company: "HealthPlus Co.",
-    weight: "60 tablets",
-    requestDate: "3/28/2025",
-    status: "In Progress",
-    contactPerson: "Sarah Johnson"
+    key: 'pending',
+    label: 'Pending',
+    icon: <FaClock className="text-yellow-500 w-8 h-8" />, 
+    colorClass: ''
   },
   {
-    id: 3,
-    productName: "Canned Vegetables",
-    company: "Green Valley Foods",
-    weight: "400g",
-    requestDate: "3/30/2025",
-    status: "Pending",
-    contactPerson: "Emily Chen"
+    key: 'in_progress',
+    label: 'In Progress',
+    icon: <FaFlask className="text-blue-500 w-8 h-8" />, 
+    colorClass: ''
+  },
+  {
+    key: 'completed',
+    label: 'Completed',
+    icon: <FaCheckCircle className="text-green-500 w-8 h-8" />, 
+    colorClass: ''
   }
 ];
 
-const StatusCard = ({ title, count, icon, color, textColor, borderColor }) => {
-  return (
-    <div className={`p-6 rounded-xl border ${borderColor} ${color} transition-all duration-200 hover:shadow-md`}>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className={`text-2xl font-semibold mt-2 ${textColor}`}>{count}</p>
-        </div>
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${color}`}>
-          {icon}
-        </div>
-      </div>
-    </div>
-  );
-};
+const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-const StatusBadge = ({ status }) => {
-  const statusStyles = {
-    Pending: "bg-yellow-50 text-yellow-800 border-yellow-200",
-    "In Progress": "bg-blue-50 text-blue-800 border-blue-200",
-    Completed: "bg-green-50 text-green-800 border-green-200",
-    Declined: "bg-red-50 text-red-800 border-red-200",
-    Cancelled: "bg-gray-50 text-gray-800 border-gray-200"
+function getStatusColor(status) {
+  switch (status?.toLowerCase()) {
+    case 'pending':
+      return { bgClass: 'bg-yellow-100', textClass: 'text-yellow-800', dotClass: 'bg-yellow-500' };
+    case 'in progress':
+      return { bgClass: 'bg-blue-100', textClass: 'text-blue-800', dotClass: 'bg-blue-500' };
+    case 'completed':
+      return { bgClass: 'bg-green-100', textClass: 'text-green-800', dotClass: 'bg-green-500' };
+    case 'declined':
+      return { bgClass: 'bg-red-100', textClass: 'text-red-800', dotClass: 'bg-red-500' };
+    default:
+      return { bgClass: 'bg-gray-100', textClass: 'text-gray-800', dotClass: 'bg-gray-500' };
+  }
+}
+
+export default function ShelfLifeDashboard() {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState('');
+  const [selectedDay, setSelectedDay] = useState(new Date());
+  const [currentDay, setCurrentDay] = useState(0);
+  const [calendarDays, setCalendarDays] = useState([]);
+  const [dashboardData, setDashboardData] = useState({
+    stats: {
+      total_appointments: 0,
+      pending: 0,
+      completed: 0,
+      in_progress: 0
+    },
+    appointments: [],
+    recentAppointments: [],
+    analysisTypes: []
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedDayAppointments, setSelectedDayAppointments] = useState([]);
+  const [loadingSelectedDay, setLoadingSelectedDay] = useState(false);
+
+  useEffect(() => {
+    fetchDashboardData();
+    const today = new Date();
+    setCurrentDate(today);
+    setCurrentDay(today.getDate());
+    setSelectedDay(today.getDate());
+    generateCalendarDays(today);
+    updateMonthDisplay(today);
+    // eslint-disable-next-line
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      // Fetch appointments with shelf life details
+      const response = await fetch('/api/appointments?category=shelf-life');
+      const data = await response.json();
+      if (data.success) {
+        const appointments = (data.data || []).map(a => ({
+          ...a,
+          // If shelf_life_details fields are present, keep them; otherwise, leave undefined
+          product_type: a.product_type,
+          storage_conditions: a.storage_conditions,
+          shelf_life_duration: a.shelf_life_duration,
+          packaging_type: a.packaging_type,
+          modes_of_deterioration: a.modes_of_deterioration,
+        }));
+        // Compute stats
+        const stats = {
+          total_appointments: appointments.length,
+          pending: appointments.filter(a => a.status === 'pending').length,
+          completed: appointments.filter(a => a.status === 'completed').length,
+          in_progress: appointments.filter(a => a.status === 'in progress').length
+        };
+        // Recent appointments (last 5 by date)
+        const recentAppointments = [...appointments]
+          .sort((a, b) => new Date(b.appointment_date) - new Date(a.appointment_date))
+          .slice(0, 5);
+        // Count occurrences of each services
+        const analysisTypeCounts = {};
+        appointments.forEach(a => {
+          if (a.services) {
+            a.services.split(',').forEach(type => {
+              const trimmed = type.trim();
+              if (trimmed) analysisTypeCounts[trimmed] = (analysisTypeCounts[trimmed] || 0) + 1;
+            });
+          }
+        });
+        const analysisTypes = Object.entries(analysisTypeCounts).map(([services, count]) => ({ services, count }));
+        setDashboardData({
+          stats,
+          appointments,
+          recentAppointments,
+          analysisTypes
+        });
+        generateCalendarDays(currentDate, appointments);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      setError(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const updateMonthDisplay = (date) => {
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                      'July', 'August', 'September', 'October', 'November', 'December'];
+    setCurrentMonth(`${monthNames[date.getMonth()]} ${date.getFullYear()}`);
+  };
+
+  const goToPreviousMonth = () => {
+    const newDate = new Date(currentDate);
+    newDate.setMonth(newDate.getMonth() - 1);
+    const lastDayOfNewMonth = new Date(newDate.getFullYear(), newDate.getMonth() + 1, 0).getDate();
+    const preservedDay = Math.min(selectedDay, lastDayOfNewMonth);
+    setCurrentDate(newDate);
+    setSelectedDay(preservedDay);
+    generateCalendarDays(newDate, dashboardData.appointments);
+    updateMonthDisplay(newDate);
+  };
+
+  const goToNextMonth = () => {
+    const newDate = new Date(currentDate);
+    newDate.setMonth(newDate.getMonth() + 1);
+    const lastDayOfNewMonth = new Date(newDate.getFullYear(), newDate.getMonth() + 1, 0).getDate();
+    const preservedDay = Math.min(selectedDay, lastDayOfNewMonth);
+    setCurrentDate(newDate);
+    setSelectedDay(preservedDay);
+    generateCalendarDays(newDate, dashboardData.appointments);
+    updateMonthDisplay(newDate);
+  };
+
+  const generateCalendarDays = (date, appointments = []) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+    const firstDayWeekday = firstDayOfMonth.getDay();
+    const totalDays = lastDayOfMonth.getDate();
+    const days = [];
+    // Create appointment lookup map
+    const appointmentMap = {};
+    appointments.forEach(apt => {
+      let aptDate;
+      if (typeof apt.appointment_date === 'string') {
+        // Always parse as local date (YYYY-MM-DD)
+        const [year, month, day] = apt.appointment_date.split('-').map(Number);
+        aptDate = new Date(year, month - 1, day);
+      } else if (apt.appointment_date instanceof Date) {
+        aptDate = new Date(apt.appointment_date.getFullYear(), apt.appointment_date.getMonth(), apt.appointment_date.getDate());
+      } else {
+        aptDate = new Date(apt.appointment_date);
+      }
+      if (aptDate.getMonth() === month && aptDate.getFullYear() === year) {
+        const dayKey = aptDate.getDate();
+        if (!appointmentMap[dayKey]) {
+          appointmentMap[dayKey] = { count: 0, statuses: [] };
+        }
+        appointmentMap[dayKey].count += 1;
+        appointmentMap[dayKey].statuses.push(apt.status);
+      }
+    });
+    for (let i = 0; i < firstDayWeekday; i++) {
+      days.push({ day: null, isCurrentMonth: false, date: null });
+    }
+    for (let i = 1; i <= totalDays; i++) {
+      days.push({
+        day: i,
+        isCurrentMonth: true,
+        appointments: appointmentMap[i]
+          ? { count: appointmentMap[i].count, statuses: appointmentMap[i].statuses.join(', ') }
+          : null,
+        date: new Date(year, month, i)
+      });
+    }
+    const neededRows = Math.ceil((firstDayWeekday + totalDays) / 7);
+    const totalCells = neededRows * 7;
+    const remainingCells = totalCells - days.length;
+    for (let i = 0; i < remainingCells; i++) {
+      days.push({ day: null, isCurrentMonth: false, date: null });
+    }
+    setCalendarDays(days);
+  };
+
+  const fetchAppointmentsForDay = useCallback(async (date) => {
+    if (!date) {
+      setSelectedDayAppointments([]);
+      return;
+    }
+    setLoadingSelectedDay(true);
+    try {
+      const year = date.getFullYear();
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      const response = await fetch(`/api/appointments?category=shelf-life&date=${year}-${month}-${day}`);
+      if (!response.ok) throw new Error('Network response was not ok');
+      const data = await response.json();
+      if (data.success) {
+        setSelectedDayAppointments(data.data || []);
+      } else {
+        setSelectedDayAppointments([]);
+      }
+    } catch (error) {
+      setSelectedDayAppointments([]);
+    } finally {
+      setLoadingSelectedDay(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedDay && selectedDay instanceof Date && !isNaN(selectedDay)) {
+      fetchAppointmentsForDay(selectedDay);
+    } else {
+      setSelectedDayAppointments([]);
+    }
+  }, [selectedDay, fetchAppointmentsForDay]);
+
   return (
-    <span className={`px-3 py-1 rounded-full text-sm border ${statusStyles[status]}`}>
-      {status}
-    </span>
-  );
-};
-
-export default function ShelfLifePage() {
-  const [appointments] = useState(dummyAppointments);
-
-  return (
-    <AdminLayout>
-      <div className="h-screen flex flex-col">
-        <DashboardNav />
-        <div className="flex flex-1 overflow-hidden">
-          <DashboardSidebar />
-          <main className="flex-1 bg-gray-100 p-6 overflow-y-auto">
-            <div className="mb-6">
-              <h1 className="text-2xl font-semibold text-gray-900">Shelf Life Testing Dashboard</h1>
-              <p className="text-sm text-gray-500">Overview of product shelf life testing appointments</p>
-            </div>
-
-            {/* Status Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-6 mb-6">
-              <StatusCard
-                title="Pending Tests"
-                count="2"
-                color="bg-yellow-50"
-                textColor="text-yellow-700"
-                borderColor="border-yellow-100"
-                icon={
-                  <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                }
-              />
-              <StatusCard
-                title="In Progress" 
-                count="1"
-                color="bg-blue-50"
-                textColor="text-blue-700"
-                borderColor="border-blue-100"
-                icon={
-                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                }
-              />
-              <StatusCard
-                title="Completed"
-                count="0"
-                color="bg-green-50"
-                textColor="text-green-700"
-                borderColor="border-green-100"
-                icon={
-                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                }
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-6">
-              {/* Calendar Card */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-                <div className="text-center mb-4">
-                  <h3 className="text-base font-medium">April 2025</h3>
-                  <p className="text-sm text-gray-500">Calendar view of testing appointments</p>
-                </div>
-                <div className="grid grid-cols-7 text-sm">
-                  <div className="text-center p-2">Su</div>
-                  <div className="text-center p-2">Mo</div>
-                  <div className="text-center p-2">Tu</div>
-                  <div className="text-center p-2">We</div>
-                  <div className="text-center p-2">Th</div>
-                  <div className="text-center p-2">Fr</div>
-                  <div className="text-center p-2">Sa</div>
-                  <div className="text-center p-2 text-gray-400">31</div>
-                  {Array.from({ length: 30 }, (_, i) => (
-                    <div
-                      key={i + 1}
-                      className={`text-center p-2 ${
-                        [1, 28, 30].includes(i + 1)
-                          ? "text-blue-600 bg-blue-50 rounded"
-                          : ""
-                      }`}
-                    >
-                      {i + 1}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Appointments Table */}
-              <div className="bg-white rounded-lg border border-gray-200">
-                <div className="p-4 border-b border-gray-200">
-                  <h2 className="text-lg font-medium">Upcoming Appointments</h2>
-                  <p className="text-sm text-gray-500">Next scheduled testing appointments</p>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Weight</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {appointments.map((appointment) => (
-                        <tr key={appointment.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {appointment.contactPerson}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {appointment.productName}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {appointment.company}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {appointment.weight}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {appointment.requestDate}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <StatusBadge status={appointment.status} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </main>
-        </div>
-      </div>
-    </AdminLayout>
+    <DashboardLayout
+      stats={dashboardData.stats}
+      statConfig={statConfig}
+      calendarProps={{
+        currentMonth,
+        weekdays,
+        calendarDays,
+        selectedDay,
+        currentDay,
+        goToPreviousMonth,
+        goToNextMonth,
+        setSelectedDay,
+        getStatusColor,
+      }}
+      recentAppointments={dashboardData.recentAppointments}
+      loading={loading}
+      error={error}
+      selectedDayAppointments={selectedDayAppointments}
+      loadingSelectedDay={loadingSelectedDay}
+      dayAppointmentsProps={{
+        selectedDay,
+        currentMonth,
+      }}
+      analysisTypes={dashboardData.analysisTypes}
+    />
   );
 } 

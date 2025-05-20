@@ -24,6 +24,21 @@ module.exports = {
           900: '#0c4a6e',
         },
       },
+      animation: {
+        'calendar-pulse': 'calendarPulse 0.5s cubic-bezier(0.4, 0, 0.6, 1)',
+        'selected-ring': 'selectedRing 0.4s cubic-bezier(0.4, 0, 0.6, 1)',
+      },
+      keyframes: {
+        calendarPulse: {
+          '0%': { boxShadow: '0 0 0 0 rgba(59,130,246,0.5)' },
+          '70%': { boxShadow: '0 0 0 10px rgba(59,130,246,0)' },
+          '100%': { boxShadow: '0 0 0 0 rgba(59,130,246,0)' },
+        },
+        selectedRing: {
+          '0%': { boxShadow: '0 0 0 0 rgba(59,130,246,0.7)' },
+          '100%': { boxShadow: '0 0 0 4px rgba(59,130,246,0.2)' },
+        },
+      },
     },
   },
   plugins: [],

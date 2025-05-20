@@ -4,10 +4,13 @@ import { useState } from "react";
 import { format } from 'date-fns';
 import { FaSearch, FaEye, FaTimes } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
-import DashboardNav from "@/app/components/shared/DashboardNav";
-import DashboardSidebar from "@/app/components/shared/DashboardSidebar";
-import AdminLayout from "@/app/components/shared/AdminLayout";
-import { Button, Card, StatusBadge, Input, Select } from '@/app/components/shared/ui';
+import DashboardNav from "@/components/layout/DashboardNav";
+import DashboardSidebar from "@/components/layout/DashboardSidebar";
+import AdminLayout from "@/components/layout/AdminLayout";
+import { Button, Card, StatusBadge, Input, Select } from '@/components/ui';
+import ReportsStatsCards from '@/components/shared/ReportsStatsCards';
+import ReportsToolbar from '@/components/shared/ReportsToolbar';
+import ReportsAppointmentsTable from '@/components/shared/ReportsAppointmentsTable';
 
 const ReportDetailsModal = ({ isOpen, onClose, report }) => {
   const [activeTab, setActiveTab] = useState('Product Info');
@@ -223,6 +226,31 @@ const ReportDetailsModal = ({ isOpen, onClose, report }) => {
   );
 };
 
+function getStatusColor(status) {
+  switch (status) {
+    case 'completed':
+      return { bgClass: 'bg-green-100', textClass: 'text-green-700', dotClass: 'bg-green-500' };
+    case 'declined':
+      return { bgClass: 'bg-red-100', textClass: 'text-red-700', dotClass: 'bg-red-500' };
+    case 'cancelled':
+      return { bgClass: 'bg-gray-100', textClass: 'text-gray-700', dotClass: 'bg-gray-400' };
+    default:
+      return { bgClass: 'bg-yellow-100', textClass: 'text-yellow-700', dotClass: 'bg-yellow-500' };
+  }
+}
+
+function toISODate(dateStr) {
+  if (!dateStr) return undefined;
+  const d = new Date(dateStr);
+  if (!isNaN(d)) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  return undefined;
+}
+
 export default function ShelfLifeReportsPage() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -269,124 +297,60 @@ export default function ShelfLifeReportsPage() {
     }
   ];
 
-  const filteredReports = reports.filter(report => {
+  const normalizedReports = reports.map(report => ({
+    ...report,
+    date: report.date || toISODate(report.testDate),
+    client: report.client || {
+      name: report.clientName || report.contactPerson || 'Unknown',
+      organization: report.company || 'Unknown',
+    },
+    sample: report.productName || '',
+    sampleDetails: report.sampleDetails || { laboratory: 'Shelf Life' },
+  }));
+
+  const filteredReports = normalizedReports.filter(report => {
     const matchesSearch = 
       report.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       report.clientId.toLowerCase().includes(searchQuery.toLowerCase()) ||
       report.productName.toLowerCase().includes(searchQuery.toLowerCase());
-    
     const matchesFilter = filterStatus === 'all' || report.status === filterStatus;
-    
     return matchesSearch && matchesFilter;
   });
 
-  const handleViewReport = (report) => {
-    setSelectedReport(report);
-    setIsModalOpen(true);
-  };
+  const completedCount = reports.filter(r => r.status === 'completed').length;
+  const declinedCount = reports.filter(r => r.status === 'declined').length;
+  const cancelledCount = reports.filter(r => r.status === 'cancelled').length;
 
   return (
     <AdminLayout>
       <div className="h-screen flex flex-col">
-        <DashboardNav/>
+        <DashboardNav />
         <div className="flex flex-1 overflow-hidden">
-          <DashboardSidebar/>
-          <main className="flex-1 bg-gray-100">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-8">
-                <div className="flex items-center gap-3">
-                 
-                  <h1 className="text-2xl font-semibold">Shelf Life Reports</h1>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center mb-6">
-                <div className="relative w-[300px]">
-                  <Input
-                    placeholder="Search by ID, client, or product"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 h-10 bg-white"
-                  />
-                  <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                </div>
-                <Select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="w-[150px] h-10"
-                >
-                  <option value="all">All Status</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                </Select>
-              </div>
-
-              <Card className="overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full">
-                    <thead>
-                      <tr className="bg-gray-50">
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Report ID
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Client ID
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Product Name
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Test Date
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredReports.map((report) => (
-                        <tr key={report.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600">
-                            {report.id}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {report.clientId}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {report.productName}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {format(new Date(report.testDate), 'MMM d, yyyy')}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <StatusBadge variant={report.status === 'completed' ? 'success' : 'danger'}>
-                              {report.status}
-                            </StatusBadge>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <button
-                              onClick={() => handleViewReport(report)}
-                              className="text-gray-400 hover:text-gray-600"
-                            >
-                              <FaEye className="w-5 h-5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-
+          <DashboardSidebar />
+          <main className="flex-1 bg-gray-100 p-6 overflow-y-auto">
+            <h1 className="text-2xl font-semibold text-gray-900 mb-6">Shelf Life Reports</h1>
+            <ReportsStatsCards completedCount={completedCount} declinedCount={declinedCount} cancelledCount={cancelledCount} />
+            <ReportsToolbar
+              title="Reports"
+              onExport={() => {}}
+              searchTerm={searchQuery}
+              setSearchTerm={setSearchQuery}
+              filterType={filterStatus}
+              setFilterType={setFilterStatus}
+              dateSort={"newest"}
+              setDateSort={() => {}}
+              filterOptions={['Completed', 'Declined', 'Cancelled']}
+            />
+            <ReportsAppointmentsTable
+              appointments={filteredReports}
+              getStatusColor={getStatusColor}
+              onViewDetails={setSelectedReport}
+            />
               <ReportDetailsModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 report={selectedReport}
               />
-            </div>
           </main>
         </div>
       </div>

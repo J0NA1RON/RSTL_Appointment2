@@ -2,10 +2,37 @@
 
 import { useState } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
+import LoadingOverlay from '@/components/shared/LoadingOverlay';
+
+function ResultModal({ isOpen, onClose, success, message, appointmentId }) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+        <div className="flex items-center gap-3 mb-4">
+          {success ? (
+            <svg className="h-7 w-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          ) : (
+            <svg className="h-7 w-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          )}
+          <h3 className={`text-lg font-semibold ${success ? 'text-green-700' : 'text-red-700'}`}>{success ? 'Submission Successful' : 'Submission Failed'}</h3>
+        </div>
+        <div className={`mb-4 text-sm ${success ? 'text-green-700' : 'text-red-700'}`}>{message}</div>
+        {success && appointmentId && (
+          <div className="mb-4 text-sm text-gray-700">Your Appointment ID: <span className="font-semibold">{appointmentId}</span></div>
+        )}
+        <div className="flex justify-end">
+          <button onClick={onClose} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium">Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ResearchConsultation() {
     const [formData, setFormData] = useState({
         fullName: '',
+        sex: '',
         emailAddress: '',
         contactNumber: '',
         institution: '',
@@ -26,6 +53,7 @@ export default function ResearchConsultation() {
         message: '',
         appointmentId: null
     });
+    const [showResultModal, setShowResultModal] = useState(false);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -64,6 +92,7 @@ export default function ResearchConsultation() {
 
         // Personal Information validation
         if (!formData.fullName) newErrors.fullName = 'Please enter your full name';
+        if (!formData.sex) newErrors.sex = 'Please select your sex';
         if (!formData.emailAddress) newErrors.emailAddress = 'Please enter your email address';
         if (!formData.contactNumber) newErrors.contactNumber = 'Please enter your contact number';
         if (!formData.institution) newErrors.institution = 'Please enter your institution';
@@ -85,13 +114,31 @@ export default function ResearchConsultation() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (validateForm()) {
-            const formDataToSubmit = {
-                ...formData,
-                selectedDate: selectedDate ? selectedDate.toISOString() : null
-            };
-            
+            setIsSubmitting(true);
             try {
-                setIsSubmitting(true);
+                // Upload files first
+                let uploadedFiles = [];
+                if (selectedFiles.length > 0) {
+                    for (const file of selectedFiles) {
+                        const formDataUpload = new FormData();
+                        formDataUpload.append('file', file);
+                        const res = await fetch('/api/uploads/appointment', {
+                            method: 'POST',
+                            body: formDataUpload,
+                        });
+                        const data = await res.json();
+                        if (data.success && data.files && data.files.length > 0) {
+                            uploadedFiles.push(data.files[0]);
+                        } else {
+                            throw new Error(data.message || 'File upload failed');
+                        }
+                    }
+                }
+                const formDataToSubmit = {
+                    ...formData,
+                    selectedDate: selectedDate ? selectedDate.toISOString() : null,
+                    uploadedFiles
+                };
                 const response = await fetch('/api/appointments/research-consultation', {
                     method: 'POST',
                     headers: {
@@ -99,19 +146,17 @@ export default function ResearchConsultation() {
                     },
                     body: JSON.stringify(formDataToSubmit),
                 });
-                
                 const data = await response.json();
-                
                 if (data.success) {
-                    // Show success message
                     setSubmissionStatus({
                         success: true,
-                        message: 'Your research consultation has been scheduled successfully!',
+                        message: 'Thank you! Your research consultation request has been received. You will receive a confirmation email shortly.',
                         appointmentId: data.appointmentId
                     });
-                    // Reset form
+                    setShowResultModal(true);
                     setFormData({
                         fullName: '',
+                        sex: '',
                         emailAddress: '',
                         contactNumber: '',
                         institution: '',
@@ -124,18 +169,18 @@ export default function ResearchConsultation() {
                     setSelectedDate(null);
                     setSelectedFiles([]);
                 } else {
-                    // Show error message
                     setSubmissionStatus({
                         success: false,
-                        message: data.message || 'Failed to schedule consultation. Please try again.'
+                        message: data.message || 'Sorry, we could not process your request. Please check your details and try again.'
                     });
+                    setShowResultModal(true);
                 }
             } catch (error) {
-                console.error('Error submitting form:', error);
                 setSubmissionStatus({
                     success: false,
-                    message: 'Network error. Please check your connection and try again.'
+                    message: error.message || 'A network error occurred. Please check your connection and try again.'
                 });
+                setShowResultModal(true);
             } finally {
                 setIsSubmitting(false);
             }
@@ -198,6 +243,7 @@ export default function ResearchConsultation() {
 
     return (
         <div className="min-h-screen bg-gray-50 py-4 sm:py-8">
+            {isSubmitting && <LoadingOverlay message="Submitting your request..." />}
             <div className="max-w-[98rem] mx-auto px-4 sm:px-6 lg:px-8">
                 {/* Header */}
                 <div className="flex items-center justify-center gap-2 text-blue-600 mb-2">
@@ -245,6 +291,24 @@ export default function ResearchConsultation() {
                                     />
                                     {errors.fullName && (
                                         <p className="mt-1 text-sm text-red-600">{errors.fullName}</p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm text-gray-700">Sex</label>
+                                    <select
+                                        name="sex"
+                                        value={formData.sex}
+                                        onChange={handleChange}
+                                        className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.sex ? 'border-red-500' : 'border-gray-300'} rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500`}
+                                    >
+                                        <option value="">Select</option>
+                                        <option value="Male">Male</option>
+                                        <option value="Female">Female</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                    {errors.sex && (
+                                        <p className="mt-1 text-sm text-red-600">{errors.sex}</p>
                                     )}
                                 </div>
 
@@ -533,34 +597,13 @@ export default function ResearchConsultation() {
                     </form>
                     
                     {/* Success/Error Message */}
-                    {submissionStatus.message && (
-                        <div className={`mt-6 p-4 rounded-md ${submissionStatus.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                            <div className="flex items-start">
-                                <div className="flex-shrink-0">
-                                    {submissionStatus.success ? (
-                                        <svg className="h-5 w-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                    ) : (
-                                        <svg className="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                    )}
-                                </div>
-                                <div className="ml-3">
-                                    <h3 className={`text-sm font-medium ${submissionStatus.success ? 'text-green-800' : 'text-red-800'}`}>
-                                        {submissionStatus.success ? 'Success!' : 'Error'}
-                                    </h3>
-                                    <div className={`mt-1 text-sm ${submissionStatus.success ? 'text-green-700' : 'text-red-700'}`}>
-                                        <p>{submissionStatus.message}</p>
-                                        {submissionStatus.success && submissionStatus.appointmentId && (
-                                            <p className="mt-1">Appointment ID: {submissionStatus.appointmentId}</p>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                    <ResultModal
+                        isOpen={showResultModal}
+                        onClose={() => setShowResultModal(false)}
+                        success={submissionStatus.success}
+                        message={submissionStatus.message}
+                        appointmentId={submissionStatus.appointmentId}
+                    />
                 </div>
             </div>
         </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import LaboratoryAppointmentForm from '../../components/laboratory/LaboratoryAppointmentForm';
+import LaboratoryAppointmentForm from '@/components/features/laboratory/LaboratoryAppointmentForm';
 
 export default function LaboratoryAppointment() {
   return <LaboratoryAppointmentForm />;

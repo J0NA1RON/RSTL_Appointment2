@@ -4,74 +4,95 @@ import Link from "next/link";
 
 export default function ShelfLifePage() {
   const [openQuestion, setOpenQuestion] = useState(null);
-  const [activeTab, setActiveTab] = useState('Services');
+  const [expandedCategory, setExpandedCategory] = useState(null);
 
   const toggleQuestion = (index) => {
-    if (openQuestion === index) {
-      setOpenQuestion(null);
-    } else {
-      setOpenQuestion(index);
-    }
+    setOpenQuestion(openQuestion === index ? null : index);
   };
 
   const faqQuestions = [
     {
-      question: "What types of calibration services do you offer?",
-      answer: "We provide comprehensive calibration services for various measuring instruments, including dimensional, electrical, temperature, pressure, and mass calibration. All our services comply with ISO/IEC 17025 standards.",
-      category: "Services",
-      icon: (
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-      )
+      question: "What is shelf life testing?",
+      answer: "Shelf life testing determines how long a product remains safe and effective under specified storage conditions. It helps ensure product quality and regulatory compliance.",
     },
     {
-      question: "How long does the calibration process take?",
-      answer: "Standard calibration typically takes 3-5 business days, depending on the instrument type and workload. We also offer expedited services for urgent requirements at an additional cost.",
-      category: "Process",
-      icon: (
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      )
+      question: "What types of products can be tested?",
+      answer: "We test food, beverages, pharmaceuticals, cosmetics, and other consumer goods for shelf life and stability.",
     },
     {
-      question: "What documentation do I receive after calibration?",
-      answer: "You'll receive a detailed calibration certificate that includes measurement data, traceability information, and uncertainty values. All certificates are ISO 17025 compliant and recognized internationally.",
-      category: "Certification",
-      icon: (
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      )
+      question: "How long does shelf life testing take?",
+      answer: "The duration depends on the product and the required testing protocol. Accelerated tests can provide results in weeks, while real-time tests may take months.",
     },
     {
-      question: "Do you provide on-site calibration services?",
-      answer: "Yes, we offer on-site calibration for certain types of equipment when moving them is impractical or could affect their calibration. Contact us to discuss your specific needs and requirements.",
-      category: "Services",
-      icon: (
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-      )
+      question: "What methods are used in shelf life testing?",
+      answer: "We use a combination of chemical, microbiological, and sensory analysis, as well as accelerated aging protocols.",
     },
     {
-      question: "How often should I calibrate my instruments?",
-      answer: "Calibration frequency depends on factors like usage, environment, and accuracy requirements. We can help you establish an appropriate calibration interval based on your specific needs and industry standards.",
-      category: "Process",
-      icon: (
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      )
-    }
+      question: "Can you help with regulatory compliance?",
+      answer: "Yes, our reports are suitable for regulatory submissions and product labeling requirements.",
+    },
   ];
 
-  const tabs = ['Services', 'Process', 'Certification', 'Support'];
-  const filteredQuestions = faqQuestions.filter(faq => faq.category === activeTab);
+  const shelfLifeServices = [
+    {
+      key: 'food',
+      title: 'Food & Beverage Shelf Life',
+      description: 'Testing for spoilage, microbial growth, and quality changes in food and drinks.',
+      price: '₱2,500.00+',
+      details: [
+        'Microbial stability',
+        'Sensory evaluation',
+        'Packaging assessment',
+        'Accelerated/real-time testing',
+      ],
+    },
+    {
+      key: 'cosmetics',
+      title: 'Cosmetics & Personal Care',
+      description: 'Stability and safety testing for creams, lotions, and other personal care products.',
+      price: '₱3,000.00+',
+      details: [
+        'Preservative efficacy',
+        'Physical/chemical stability',
+        'Microbial challenge tests',
+      ],
+    },
+    {
+      key: 'pharma',
+      title: 'Pharmaceuticals',
+      description: 'Shelf life and stability studies for drugs and supplements.',
+      price: '₱5,000.00+',
+      details: [
+        'Active ingredient stability',
+        'Dissolution testing',
+        'Packaging compatibility',
+      ],
+    },
+    {
+      key: 'packaging',
+      title: 'Packaging Materials',
+      description: 'Assessment of packaging impact on product shelf life.',
+      price: '₱1,500.00+',
+      details: [
+        'Barrier property testing',
+        'Migration studies',
+        'Environmental simulation',
+      ],
+    },
+  ];
 
   return (
     <div>
+      {/* Hero Section */}
       <div className="max-w-full mx-auto pt-12">
-        <div className="max-w-[100rem] mx-auto bg-[#F2F7FF] flex flex-col md:flex-row items-center justify-between gap-8">
+        <div className="max-w-[100rem] mx-auto bg-blue-50 flex flex-col md:flex-row items-center justify-between gap-8">
         {/* Left side - Text content */}
           <div className="max-w-2xl p-8 md:p-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-6">Shelf Life  Testing Services</h1>
+            <h1 className="text-4xl font-bold text-gray-900 mb-6">Shelf Life Testing Laboratory</h1>
           <p className="text-gray-600 text-lg mb-8">
-            Lorem ipsum dolor sit amet. Et quasi veniam et dicta aperiam non nemo illum ut exercitationem quod. Eum ipsum quidem rem rerum neque qui enim molestiae non illum harum non beatae voluptas sed temporibus quisquam est nemo.
+              Ensure your products remain safe, effective, and market-ready with our comprehensive shelf life testing services. We help you determine product stability, optimize packaging, and meet regulatory requirements.
           </p>
           <div className="flex gap-4">
-                {/* Button with Link */}
                 <Link href="/laboratory/appointment">
                   <button className="bg-blue-600 text-white px-6 py-3 rounded-md font-medium flex items-center hover:bg-blue-700 transition-colors">
                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -82,15 +103,13 @@ export default function ShelfLifePage() {
                 </Link>
               </div>
         </div>
-
         {/* Right side - Image */}
         <div className="relative w-full md:w-1/2 h-[400px] bg-gray-100 rounded-lg overflow-hidden">
           <img
-            src="/chem1.jpg"
-            alt="Microbiology Testing Laboratory"
+              src="/shelf-life.jpg"
+              alt="Shelf Life Testing Laboratory"
             className="w-full h-full object-cover"
           />
-          {/* Decorative overlay */}
           <div className="absolute bottom-0 right-0 w-full h-full bg-gradient-to-tr from-blue-900/20 to-transparent"></div>
         </div>
       </div>
@@ -98,12 +117,11 @@ export default function ShelfLifePage() {
         {/* How It Works Section */}
         <div className="max-w-[76rem] mx-auto mt-24">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">How It Works</h2>
+            <h2 className="text-3xl font-bold text-blue-900 mb-4">How It Works</h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              Our streamlined process makes laboratory testing simple and efficient
+              Our streamlined process makes shelf life testing simple and efficient
             </p>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             {/* Step 1 */}
             <div className="text-center">
@@ -115,10 +133,9 @@ export default function ShelfLifePage() {
               <div className="text-gray-400 text-sm mb-2">01</div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Schedule</h3>
               <p className="text-gray-600 text-sm">
-                Book your appointment online or by phone
+                Book your shelf life test online or by phone
               </p>
             </div>
-
             {/* Step 2 */}
             <div className="text-center">
               <div className="flex justify-center mb-4">
@@ -132,7 +149,6 @@ export default function ShelfLifePage() {
                 Drop off or ship your samples to our lab
               </p>
             </div>
-
             {/* Step 3 */}
             <div className="text-center">
               <div className="flex justify-center mb-4">
@@ -143,10 +159,9 @@ export default function ShelfLifePage() {
               <div className="text-gray-400 text-sm mb-2">03</div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Testing</h3>
               <p className="text-gray-600 text-sm">
-                Our experts analyze your samples with precision
+                Our experts analyze your samples for stability and safety
               </p>
             </div>
-
             {/* Step 4 */}
             <div className="text-center">
               <div className="flex justify-center mb-4">
@@ -157,38 +172,102 @@ export default function ShelfLifePage() {
               <div className="text-gray-400 text-sm mb-2">04</div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Results</h3>
               <p className="text-gray-600 text-sm">
-                Receive detailed reports and analysis
+                Receive detailed shelf life reports and recommendations
               </p>
+            </div>
             </div>
           </div>
 
-          <div className="flex justify-center mt-12">
-              <Link href="/metrology/appointment">
-                <button className="bg-[#2563EB] text-white px-6 py-3 rounded-md font-medium flex items-center hover:bg-[#395490] transition-colors">
-                  Schedule Your Test Now
-                  <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+        {/* Service Categories Section */}
+        <div className="max-w-[98rem] mx-auto py-16 bg-white">
+          <div className="px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">Shelf Life Testing Services</h2>
+              <p className="text-gray-600 max-w-3xl mx-auto">
+                We offer a range of shelf life and stability testing services for food, cosmetics, pharmaceuticals, and packaging.
+              </p>
+            </div>
+            <div className="max-w-[98rem] mx-auto bg-blue-50 rounded-xl p-8 mb-12">
+              {shelfLifeServices.map(service => (
+                <div key={service.key} className="bg-white rounded-lg shadow-sm overflow-hidden mb-4">
+                  <button
+                    onClick={() => setExpandedCategory(expandedCategory === service.key ? null : service.key)}
+                    className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-blue-50 transition-colors"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
+                        <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">{service.title}</h3>
+                        <p className="text-sm text-gray-600">{service.description}</p>
+                      </div>
+                    </div>
+                    <span className="text-blue-600 font-bold text-lg">{service.price}</span>
+                    <svg
+                      className={`w-5 h-5 text-gray-400 transform transition-transform ${expandedCategory === service.key ? 'rotate-180' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {expandedCategory === service.key && (
+                    <div className="px-6 py-4 border-t border-gray-100">
+                      <ul className="list-disc pl-5 space-y-2 text-gray-700 text-sm">
+                        {service.details.map((detail, i) => (
+                          <li key={i}>{detail}</li>
+                        ))}
+                      </ul>
+                      <button className="mt-6 w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                        Request Test
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            {/* Testing Schedule Info */}
+            <div className="mt-8 bg-white rounded-lg p-6 shadow-sm">
+              <div className="flex items-center mb-4">
+                <svg className="w-6 h-6 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <h3 className="text-lg font-semibold text-gray-900">Testing Schedule</h3>
+              </div>
+              <ul className="space-y-2">
+                <li className="flex items-center text-sm text-gray-600">
+                  <svg className="w-4 h-4 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                </button>
-              </Link>
+                  Shelf Life Tests: MON-FRI, by appointment
+                </li>
+                <li className="flex items-center text-sm text-gray-600">
+                  <svg className="w-4 h-4 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Samples accepted on confirmed dates only
+                </li>
+              </ul>
+            </div>
             </div>
         </div>
 
-        {/* Why Choose Our Laboratory Services Section */}
-        <div className="bg-white py-24">
+        {/* Why Choose Us Section */}
+        <div className="bg-blue-50 py-24">
           <div className="max-w-[96rem] mx-auto">
             <div className="flex flex-col lg:flex-row items-center gap-12 px-6">
               {/* Left side content */}
               <div className="w-full lg:w-1/2">
                 <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                  Why Choose Our Laboratory Services
+                  Why Choose Our Shelf Life Testing
                 </h2>
                 <p className="text-gray-600 mb-8">
-                  We combine cutting-edge technology with expert analysis to deliver accurate, reliable results for all your testing needs.
+                  We combine advanced technology with expert analysis to deliver accurate, reliable shelf life results for your products.
                 </p>
-
                 <div className="space-y-6">
-                  {/* Fast Turnaround Times */}
                   <div className="flex items-start gap-4">
                     <div className="flex-shrink-0">
                       <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
@@ -198,12 +277,10 @@ export default function ShelfLifePage() {
                       </div>
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900">Fast Turnaround Times</h3>
-                      <p className="text-gray-600">Get your results quickly with our efficient testing processes</p>
+                      <h3 className="text-lg font-semibold text-gray-900">Fast Turnaround</h3>
+                      <p className="text-gray-600">Get your shelf life results quickly with our efficient processes</p>
                     </div>
                   </div>
-
-                  {/* Accredited Facilities */}
                   <div className="flex items-start gap-4">
                     <div className="flex-shrink-0">
                       <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
@@ -214,11 +291,9 @@ export default function ShelfLifePage() {
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900">Accredited Facilities</h3>
-                      <p className="text-gray-600">ISO 17025 accredited laboratories with certified professionals</p>
+                      <p className="text-gray-600">ISO 17025 accredited laboratories and certified professionals</p>
                     </div>
                   </div>
-
-                  {/* Precision & Accuracy */}
                   <div className="flex items-start gap-4">
                     <div className="flex-shrink-0">
                       <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
@@ -232,8 +307,6 @@ export default function ShelfLifePage() {
                       <p className="text-gray-600">State-of-the-art equipment and rigorous quality control</p>
                     </div>
                   </div>
-
-                  {/* Expert Consultation */}
                   <div className="flex items-start gap-4">
                     <div className="flex-shrink-0">
                       <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
@@ -249,16 +322,14 @@ export default function ShelfLifePage() {
                   </div>
                 </div>
               </div>
-
               {/* Right side image */}
               <div className="w-full lg:w-1/2">
                 <div className="relative h-[500px] rounded-lg overflow-hidden">
                   <img
-                    src="/shelf-life.jpg"
-                    alt="Laboratory Equipment"
+                    src="/shelf-life-lab.jpg"
+                    alt="Shelf Life Laboratory Equipment"
                     className="w-full h-full object-cover"
                   />
-                  {/* Decorative overlay */}
                   <div className="absolute inset-0 bg-gradient-to-br from-blue-900/40 to-transparent"></div>
                 </div>
               </div>
@@ -271,12 +342,10 @@ export default function ShelfLifePage() {
                     <div className="text-center mb-12">
                       <h2 className="text-3xl font-bold text-gray-900 mb-4">Frequently asked questions</h2>
                       <p className="text-gray-600">
-                        Common questions about our metrology services.
+              Common questions about our shelf life testing services.
                         Can't find what you're looking for? <a href="#" className="text-blue-600 hover:underline"></a>
                       </p>
                     </div>
-
-                    {/* FAQ Questions */}
                     <div className="max-w-[80rem] mx-auto space-y-4">
                       {faqQuestions.map((faq, index) => (
                         <div key={index} className="border rounded-lg hover:bg-gray-50">
@@ -286,14 +355,13 @@ export default function ShelfLifePage() {
                           >
                             <div className="flex items-center gap-4">
                               <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                {faq.icon}
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
+                      <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                               </svg>
                               <span className="text-gray-900">{faq.question}</span>
                             </div>
                             <svg
-                              className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${
-                                openQuestion === index ? 'rotate-180' : ''
-                              }`}
+                    className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${openQuestion === index ? 'rotate-180' : ''}`}
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
@@ -302,9 +370,7 @@ export default function ShelfLifePage() {
                             </svg>
                           </button>
                           <div
-                            className={`px-6 overflow-hidden transition-all duration-200 ease-in-out ${
-                              openQuestion === index ? 'max-h-40 pb-4' : 'max-h-0'
-                            }`}
+                  className={`px-6 overflow-hidden transition-all duration-200 ease-in-out ${openQuestion === index ? 'max-h-40 pb-4' : 'max-h-0'}`}
                           >
                             <p className="text-gray-600">{faq.answer}</p>
                           </div>
@@ -344,7 +410,6 @@ export default function ShelfLifePage() {
                   City 4500 Albay, Philippines
                 </p>
               </div>
-
               {/* Column 2 - Our Services */}
               <div>
                 <h3 className="text-lg font-semibold mb-6">Our Services</h3>
@@ -356,7 +421,6 @@ export default function ShelfLifePage() {
                   <li><a href="/research" className="hover:text-white">Research Consultancy</a></li>
                 </ul>
               </div>
-
               {/* Column 3 - Contact */}
               <div>
                 <h3 className="text-lg font-semibold mb-6">Contact</h3>
@@ -377,7 +441,6 @@ export default function ShelfLifePage() {
                   </div>
                 </div>
               </div>
-
               {/* Column 4 - Connect With Us */}
               <div>
                 <h3 className="text-lg font-semibold mb-6">Connect With Us</h3>
@@ -405,8 +468,6 @@ export default function ShelfLifePage() {
                 </div>
               </div>
             </div>
-
-            {/* Copyright */}
             <div className="mt-16 pt-8 border-t border-gray-700 text-center text-sm text-gray-400">
               © 2025 Department of Science and Technology V. All right reserved.
             </div>

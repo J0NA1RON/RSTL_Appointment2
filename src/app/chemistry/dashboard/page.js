@@ -1,43 +1,93 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import DashboardNav from "@/app/components/shared/DashboardNav";
-import DashboardSidebar from "@/app/components/shared/DashboardSidebar";
-import AdminLayout from "@/app/components/shared/AdminLayout";
+import { useState, useEffect, useCallback } from 'react';
+import DashboardNav from "@/components/layout/DashboardNav";
+import DashboardSidebar from "@/components/layout/DashboardSidebar";
+import AdminLayout from "@/components/layout/AdminLayout";
 import Link from "next/link";
 import { FaCalendar, FaClock, FaCheckCircle, FaFlask, FaBook, FaCubes } from 'react-icons/fa';
+import DashboardCalendar from "@/components/shared/DashboardCalendar";
+import DashboardRecentAppointments from "@/components/shared/DashboardRecentAppointments";
+import DashboardDayAppointments from "@/components/shared/DashboardDayAppointments";
+import DashboardStats from "@/components/shared/DashboardStats";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
-export default function MetrologyDashboard() {
+export default function ChemistryDashboard() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState('');
-  const [selectedDay, setSelectedDay] = useState(0);
+  const [selectedDay, setSelectedDay] = useState(new Date());
   const [currentDay, setCurrentDay] = useState(0);
   const [calendarDays, setCalendarDays] = useState([]);
-
-  // Sample appointment data
-  const appointmentData = {
-    "2025-03-24": { chemistry: true, consultancy: true },
-    "2025-03-25": {},
-    "2025-03-26": { chemistry: true },
-    "2025-03-27": { consultancy: true },
-    "2025-03-28": { chemistry: true, consultancy: true },
-  };
-  
-  // Sample data for the graph
-  const weeklyData = {
-    chemistry: [12, 15, 8, 20, 14, 18, 24],
-    consultancy: [8, 10, 12, 15, 9, 11, 15],
-    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-  };
+  const [dashboardData, setDashboardData] = useState({
+    stats: {
+      total_appointments: 0,
+      pending: 0,
+      completed: 0,
+      in_progress: 0
+    },
+    appointments: [],
+    recentAppointments: [],
+    analysisTypes: []
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedDayAppointments, setSelectedDayAppointments] = useState([]);
+  const [loadingSelectedDay, setLoadingSelectedDay] = useState(false);
   
   useEffect(() => {
-    const demoDate = new Date(2025, 2, 24);
-    setCurrentDate(demoDate);
-    setCurrentDay(24);
-    setSelectedDay(24);
-    generateCalendarDays(demoDate);
-    updateMonthDisplay(demoDate);
+    fetchDashboardData();
+    const today = new Date();
+    setCurrentDate(today);
+    setCurrentDay(today.getDate());
+    setSelectedDay(today.getDate());
+    generateCalendarDays(today);
+    updateMonthDisplay(today);
   }, []);
+  
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/appointments?category=chemistry');
+      const data = await response.json();
+      if (data.success) {
+        const appointments = data.data || [];
+        // Compute stats
+        const stats = {
+          total_appointments: appointments.length,
+          pending: appointments.filter(a => a.status === 'pending').length,
+          completed: appointments.filter(a => a.status === 'completed').length,
+          in_progress: appointments.filter(a => a.status === 'in progress').length
+        };
+        // Recent appointments (last 5 by date)
+        const recentAppointments = [...appointments]
+          .sort((a, b) => new Date(b.appointment_date) - new Date(a.appointment_date))
+          .slice(0, 5);
+        // Count occurrences of each services
+        const analysisTypeCounts = {};
+        appointments.forEach(a => {
+          if (a.services) {
+            a.services.split(',').forEach(type => {
+              const trimmed = type.trim();
+              if (trimmed) analysisTypeCounts[trimmed] = (analysisTypeCounts[trimmed] || 0) + 1;
+            });
+          }
+        });
+        const analysisTypes = Object.entries(analysisTypeCounts).map(([name, count]) => ({ services: name, count }));
+        setDashboardData({
+          stats,
+          appointments,
+          recentAppointments,
+          analysisTypes
+        });
+        generateCalendarDays(currentDate, appointments);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      setError(error);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   const updateMonthDisplay = (date) => {
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
@@ -52,7 +102,7 @@ export default function MetrologyDashboard() {
     const preservedDay = Math.min(selectedDay, lastDayOfNewMonth);
     setCurrentDate(newDate);
     setSelectedDay(preservedDay);
-    generateCalendarDays(newDate);
+    generateCalendarDays(newDate, dashboardData.appointments);
     updateMonthDisplay(newDate);
   };
   
@@ -63,11 +113,11 @@ export default function MetrologyDashboard() {
     const preservedDay = Math.min(selectedDay, lastDayOfNewMonth);
     setCurrentDate(newDate);
     setSelectedDay(preservedDay);
-    generateCalendarDays(newDate);
+    generateCalendarDays(newDate, dashboardData.appointments);
     updateMonthDisplay(newDate);
   };
   
-  const generateCalendarDays = (date) => {
+  const generateCalendarDays = (date, appointments = []) => {
     const year = date.getFullYear();
     const month = date.getMonth();
     const firstDayOfMonth = new Date(year, month, 1);
@@ -75,29 +125,54 @@ export default function MetrologyDashboard() {
     const firstDayWeekday = firstDayOfMonth.getDay();
     const totalDays = lastDayOfMonth.getDate();
     const days = [];
-    
+    // Create appointment lookup map
+    const appointmentMap = {};
+    appointments.forEach(apt => {
+      let aptDate;
+      if (typeof apt.appointment_date === 'string') {
+        // Always parse as local date (YYYY-MM-DD)
+        const [year, month, day] = apt.appointment_date.split('-').map(Number);
+        aptDate = new Date(year, month - 1, day);
+      } else if (apt.appointment_date instanceof Date) {
+        aptDate = new Date(apt.appointment_date.getFullYear(), apt.appointment_date.getMonth(), apt.appointment_date.getDate());
+      } else {
+        aptDate = new Date(apt.appointment_date);
+      }
+      // Debug log for each appointment
+      console.log('[DEBUG] Appointment:', apt, 'Parsed Date:', aptDate.toISOString(), 'Local:', aptDate.toLocaleDateString());
+      if (aptDate.getMonth() === month && aptDate.getFullYear() === year) {
+        const dayKey = aptDate.getDate();
+        if (!appointmentMap[dayKey]) {
+          appointmentMap[dayKey] = { count: 0, statuses: [] };
+        }
+        appointmentMap[dayKey].count += 1;
+        appointmentMap[dayKey].statuses.push(apt.status);
+      }
+    });
     for (let i = 0; i < firstDayWeekday; i++) {
-      days.push({ day: null, isCurrentMonth: false });
+      days.push({ day: null, isCurrentMonth: false, date: null });
     }
-    
     for (let i = 1; i <= totalDays; i++) {
-      const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-      days.push({ 
-        day: i, 
+      days.push({
+        day: i,
         isCurrentMonth: true,
-        appointments: appointmentData[dateString] || {}
+        appointments: appointmentMap[i]
+          ? { count: appointmentMap[i].count, statuses: appointmentMap[i].statuses.join(', ') }
+          : null,
+        date: new Date(year, month, i)
       });
     }
-    
     const neededRows = Math.ceil((firstDayWeekday + totalDays) / 7);
     const totalCells = neededRows * 7;
     const remainingCells = totalCells - days.length;
-    
     for (let i = 0; i < remainingCells; i++) {
-      days.push({ day: null, isCurrentMonth: false });
+      days.push({ day: null, isCurrentMonth: false, date: null });
     }
-    
     setCalendarDays(days);
+    // Debug log for calendarDays
+    setTimeout(() => {
+      console.log('[DEBUG] calendarDays:', days.map(d => ({ day: d.day, date: d.date ? d.date.toISOString() : null, appointments: d.appointments })));
+    }, 0);
   };
   
   const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -105,198 +180,110 @@ export default function MetrologyDashboard() {
   const isSelectedDay = (day) => day === selectedDay;
 
   const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-50 text-yellow-800 flex items-center gap-1 before:w-1.5 before:h-1.5 before:bg-yellow-500 before:rounded-full';
-      case 'in progress': return 'bg-blue-100 text-blue-800';
-      case 'declined': return 'bg-red-50 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+    // Ensure dotClass is included for calendar dots
+    switch (status?.toLowerCase()) {
+      case 'completed': return { bgClass: 'bg-green-100', textClass: 'text-green-800', dotClass: 'bg-green-500' };
+      case 'pending': return { bgClass: 'bg-yellow-100', textClass: 'text-yellow-800', dotClass: 'bg-yellow-500' }; // Adjusted pending for dot
+      case 'in progress': return { bgClass: 'bg-blue-100', textClass: 'text-blue-800', dotClass: 'bg-blue-500' };
+      case 'declined': return { bgClass: 'bg-red-100', textClass: 'text-red-800', dotClass: 'bg-red-500' };
+      default: return { bgClass: 'bg-gray-100', textClass: 'text-gray-800', dotClass: 'bg-gray-500' };
     }
   };
 
+  const fetchAppointmentsForDay = useCallback(async (date) => {
+    if (!date) {
+      setSelectedDayAppointments([]);
+      return;
+    }
+    setLoadingSelectedDay(true);
+    try {
+      // Debug log for selected date
+      console.log('FETCH DAY APPOINTMENTS for date:', date);
+      const response = await fetch(`/api/appointments?category=chemistry&date=${date}`);
+      if (!response.ok) throw new Error('Network response was not ok');
+      const data = await response.json();
+      if (data.success) {
+        setSelectedDayAppointments(data.data || []);
+      } else {
+         setSelectedDayAppointments([]);
+         console.error("API Error fetching day appointments:", data.message);
+      }
+    } catch (error) {
+      console.error('Error fetching day appointments:', error);
+      setSelectedDayAppointments([]); // Clear on error
+    } finally {
+      setLoadingSelectedDay(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedDay && selectedDay instanceof Date && !isNaN(selectedDay)) {
+      const year = selectedDay.getFullYear();
+      const month = (selectedDay.getMonth() + 1).toString().padStart(2, '0');
+      const day = selectedDay.getDate().toString().padStart(2, '0');
+      fetchAppointmentsForDay(`${year}-${month}-${day}`);
+    } else {
+      setSelectedDayAppointments([]); // Clear if no valid day/date
+    }
+  }, [selectedDay, fetchAppointmentsForDay]);
+
+  // Debug log for selectedDay
+  useEffect(() => {
+    console.log('[DEBUG] selectedDay:', selectedDay instanceof Date ? selectedDay.toISOString() : selectedDay);
+  }, [selectedDay]);
+
+  const statConfig = [
+    {
+      key: "total_appointments",
+      label: "Total Appointments",
+      icon: <FaCalendar className="text-blue-500 w-8 h-8" />,
+      colorClass: ""
+    },
+    {
+      key: "pending",
+      label: "Pending",
+      icon: <FaClock className="text-yellow-500 w-8 h-8" />,
+      colorClass: ""
+    },
+    {
+      key: "in_progress",
+      label: "In Progress",
+      icon: <FaFlask className="text-blue-500 w-8 h-8" />,
+      colorClass: ""
+    },
+    {
+      key: "completed",
+      label: "Completed",
+      icon: <FaCheckCircle className="text-green-500 w-8 h-8" />,
+      colorClass: ""
+    }
+  ];
+
   return (
-    <AdminLayout>
-      <div className="h-screen flex flex-col">
-        <DashboardNav />
-        <div className="flex flex-1 overflow-hidden">
-          <DashboardSidebar />
-          <main className="flex-1 bg-gray-100 p-4">
-            <div className="grid grid-cols-1 lg:grid-cols-[40%,1fr] gap-4 h-[calc(100vh-7rem)]">
-              {/* Left Section - Calendar */}
-              <div className="bg-white rounded-xl shadow-sm p-4 flex flex-col border border-gray-200">
-                {/* Calendar Header */}
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">{currentMonth}</h2>
-                  <div className="flex gap-2">
-                    <button 
-                      className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                      onClick={goToPreviousMonth}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <button 
-                      className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                      onClick={goToNextMonth}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                
-                {/* Calendar Grid */}
-                <div className="flex-1 flex flex-col">
-                  <div className="grid grid-cols-7 mb-1">
-                    {weekdays.map(day => (
-                      <div key={day} className="text-xs text-gray-500 font-medium text-center py-1">
-                        {day}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-7 gap-px bg-gray-200 flex-1">
-                    {calendarDays.map((dayObj, index) => (
-                      <button
-                        key={index}
-                        className={`
-                          relative text-sm p-1 flex flex-col items-center bg-white hover:bg-gray-50
-                          ${dayObj.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'} 
-                          ${isCurrentDay(dayObj.day) ? 'font-bold text-blue-600' : ''}
-                          ${isSelectedDay(dayObj.day) ? 'ring-2 ring-blue-500' : ''}
-                        `}
-                        onClick={() => dayObj.isCurrentMonth && setSelectedDay(dayObj.day)}
-                        disabled={!dayObj.isCurrentMonth}
-                      >
-                        <span>{dayObj.day}</span>
-                        {dayObj.appointments && (
-                          <div className="flex gap-0.5 mt-1">
-                            {dayObj.appointments.chemistry && (
-                              <div className="w-1.5 h-1.5 rounded-full bg-blue-500" title="Chemistry Test"></div>
-                            )}
-                            {dayObj.appointments.consultancy && (
-                              <div className="w-1.5 h-1.5 rounded-full bg-green-500" title="Consultancy"></div>
-                            )}
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Calendar Legend */}
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="flex items-center justify-around">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                      <span className="text-xs text-gray-600">Chemistry</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                      <span className="text-xs text-gray-600">Consultancy</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Right Section */}
-              <div className="space-y-4">
-                {/* Stats Cards */}
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Chemistry Tests */}
-                  <div className="bg-gradient-to-br from-blue-700 to-blue-500 rounded-xl p-3 flex flex-col justify-between">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="text-sm text-white">Chemistry Tests</h3>
-                        <p className="text-2xl font-bold text-white mt-2">24</p>
-                      </div>
-                      <div className="w-8 h-8 flex items-center justify-center bg-white bg-opacity-20 rounded-lg">
-                        <FaFlask className="h-4 w-4 text-white" />
-                      </div>
-                    </div>
-                    <p className="text-xs text-blue-100 mt-2">12 Pending • 8 Today</p>
-                  </div>
-                  
-                  {/* Consultancy */}
-                  <div className="bg-gradient-to-br from-green-700 to-green-500 rounded-xl p-3 flex flex-col justify-between">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="text-sm text-white">Consultancy</h3>
-                        <p className="text-2xl font-bold text-white mt-2">15</p>
-                      </div>
-                      <div className="w-8 h-8 flex items-center justify-center bg-white bg-opacity-20 rounded-lg">
-                        <FaBook className="h-4 w-4 text-white" />
-                      </div>
-                    </div>
-                    <p className="text-xs text-green-100 mt-2">5 Pending • 3 Today</p>
-                  </div>
-                </div>
-
-                {/* Graph Section */}
-                <div className="mt-6  border border-gray-200 bg-white">
-                  <div className="flex justify-between items-center mb-4 p-4">
-                    <h3 className="text-sm font-semibold">Weekly Appointment Trends</h3>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                        <span>Chemistry</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                        <span>Consultancy</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-4">
-                    {weeklyData.labels.map((label, index) => (
-                      <div key={label} className="flex-1 flex flex-col items-center gap-1">
-                        <div className="w-full flex items-end justify-center gap-0.5 h-[100px]">
-                          <div 
-                            className="w-2 bg-blue-500 rounded-t"
-                            style={{ height: `${(weeklyData.chemistry[index] / 24) * 100}%` }}
-                          ></div>
-                          <div 
-                            className="w-2 bg-green-500 rounded-t"
-                            style={{ height: `${(weeklyData.consultancy[index] / 24) * 100}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-xs text-gray-500">{label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Today's Schedule */}
-                <div className="bg-white rounded-xl shadow-sm p-4  border border-gray-200">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-sm font-semibold">Today&apos;s Schedule</h3>
-                    <span className="text-xs text-gray-500">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3 p-2 bg-blue-50 rounded-lg">
-                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Thermal Analysis - Dr. Emily Chen</p>
-                        <p className="text-xs text-gray-500">9:00 AM • Chemistry Test</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-2 bg-green-50 rounded-lg">
-                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Research Consultation - Prof. Rodriguez</p>
-                        <p className="text-xs text-gray-500">11:30 AM • Consultancy</p>
-                      </div>
-                    </div>
-                   
-                  </div>
-                </div>
-              </div>
-            </div>
-          </main>
-        </div>
-      </div>
-    </AdminLayout>
+    <DashboardLayout
+      stats={dashboardData.stats}
+      statConfig={statConfig}
+      calendarProps={{
+        currentMonth,
+        weekdays,
+        calendarDays,
+        selectedDay,
+        currentDay,
+        goToPreviousMonth,
+        goToNextMonth,
+        setSelectedDay,
+        getStatusColor,
+      }}
+      recentAppointments={dashboardData.recentAppointments}
+      loading={loading}
+      error={error}
+      selectedDayAppointments={selectedDayAppointments}
+      loadingSelectedDay={loadingSelectedDay}
+      dayAppointmentsProps={{
+        selectedDay,
+        currentMonth,
+      }}
+      analysisTypes={dashboardData.analysisTypes}
+    />
   );
 } 

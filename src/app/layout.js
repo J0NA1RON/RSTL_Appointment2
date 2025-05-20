@@ -1,6 +1,6 @@
 import { Inter } from "next/font/google";
-import "./globals.css";
-import Navbar from "./components/shared/Navbar";
+import "../styles/globals.css";
+import ClientNavbar from "../components/layout/ClientNavbar";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -16,7 +16,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased`}>
-        <Navbar />
+        <ClientNavbar />
         <main>{children}</main>
       </body>
     </html>

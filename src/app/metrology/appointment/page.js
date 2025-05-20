@@ -1,6 +1,7 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
+import LoadingOverlay from '@/components/shared/LoadingOverlay';
 
 export default function MetrologyAppointment() {
     const [formData, setFormData] = useState({
@@ -14,7 +15,8 @@ export default function MetrologyAppointment() {
         numberOfLiters: '',
         typeOfTest: 'Volume Standard Test',
         nameOfSamples: '',
-        terms: false
+        terms: false,
+        intakeFileUrl: null
     });
 
     const [errors, setErrors] = useState({});
@@ -27,6 +29,76 @@ export default function MetrologyAppointment() {
         appointmentId: null
     });
 
+    const [showErrorModal, setShowErrorModal] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
+
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
+
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState('');
+
+    const [verifiedCompanies, setVerifiedCompanies] = useState([]);
+    const [companyTrucks, setCompanyTrucks] = useState([]);
+
+    const [dailyLimit, setDailyLimit] = useState(80000);
+
+    useEffect(() => {
+        async function fetchVerifiedCompanies() {
+            const res = await fetch('/api/companies?verified=true');
+            const data = await res.json();
+            if (data.success) {
+                setVerifiedCompanies(data.data || []);
+            }
+        }
+        fetchVerifiedCompanies();
+    }, []);
+
+    useEffect(() => {
+        async function fetchTrucks() {
+            if (!formData.companyName) {
+                setCompanyTrucks([]);
+                return;
+            }
+            const company = verifiedCompanies.find(c => c.name === formData.companyName);
+            if (!company) {
+                setCompanyTrucks([]);
+                return;
+            }
+            const res = await fetch(`/api/trucks?company_id=${company.id}`);
+            const data = await res.json();
+            if (data.success) {
+                setCompanyTrucks(data.data || []);
+            }
+        }
+        fetchTrucks();
+    }, [formData.companyName, verifiedCompanies]);
+
+    useEffect(() => {
+        if (!selectedDate) return;
+        function formatLocalDate(date) {
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+        async function fetchLimit() {
+            try {
+                const dateStr = formatLocalDate(selectedDate);
+                const res = await fetch(`/api/appointments/metrology/constraints?date=${dateStr}`);
+                const data = await res.json();
+                if (data.success && data.data && data.data.daily_liter_capacity) {
+                    setDailyLimit(parseFloat(data.data.daily_liter_capacity));
+                } else {
+                    setDailyLimit(80000);
+                }
+            } catch {
+                setDailyLimit(80000);
+            }
+        }
+        fetchLimit();
+    }, [selectedDate]);
+
     const validateForm = () => {
         const newErrors = {};
 
@@ -36,6 +108,7 @@ export default function MetrologyAppointment() {
         if (!formData.contactNumber) newErrors.contactNumber = 'Please enter contact number';
         if (!formData.plateNumber) newErrors.plateNumber = 'Please enter plate number';
         if (!formData.companyName) newErrors.companyName = 'Please enter organization name';
+        if (!formData.sex) newErrors.sex = 'Please select sex';
 
         // Test Details validation
         if (!selectedDate) newErrors.appointmentDate = 'Please select an appointment date';
@@ -68,16 +141,72 @@ export default function MetrologyAppointment() {
         }
     };
 
+    const handleFileChange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setUploading(true);
+        setUploadError('');
+        try {
+            const formDataUpload = new FormData();
+            formDataUpload.append('file', file);
+            const res = await fetch('/api/uploads/appointment', {
+                method: 'POST',
+                body: formDataUpload,
+            });
+            const data = await res.json();
+            if (data.success && data.files && data.files.length > 0) {
+                setFormData(prev => ({ ...prev, intakeFileUrl: data.files[0] }));
+            } else {
+                setUploadError(data.message || 'Failed to upload file');
+            }
+        } catch (err) {
+            setUploadError('Failed to upload file');
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (validateForm()) {
-            const formDataToSubmit = {
-                ...formData,
-                selectedDate: selectedDate ? selectedDate.toISOString() : null,
-            };
-            
+            let companyId = null;
+            let truckId = null;
             try {
                 setIsSubmitting(true);
+                // 1. Lookup company by name
+                let companyRes = await fetch(`/api/companies?name=${encodeURIComponent(formData.companyName)}`);
+                let companyData = await companyRes.json();
+                if (!(companyData.success && companyData.data && companyData.data.length > 0)) {
+                    setErrorMessage('Company not registered. Please register your company first.');
+                    setShowErrorModal(true);
+                    setIsSubmitting(false);
+                    return;
+                }
+                companyId = companyData.data[0].id;
+                // 2. Lookup truck by plate number and company_id
+                let truckRes = await fetch(`/api/trucks?license_plate=${encodeURIComponent(formData.plateNumber)}&company_id=${companyId}`);
+                let truckData = await truckRes.json();
+                if (!(truckData.success && truckData.data && truckData.data.length > 0)) {
+                    setErrorMessage('Truck not registered under this company. Please register your truck first.');
+                    setShowErrorModal(true);
+                    setIsSubmitting(false);
+                    return;
+                }
+                truckId = truckData.data[0].id;
+                // 3. Submit appointment
+                function formatLocalDate(date) {
+                    const year = date.getFullYear();
+                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    const day = date.getDate().toString().padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+                const formDataToSubmit = {
+                    ...formData,
+                    selectedDate: selectedDate ? formatLocalDate(selectedDate) : null,
+                    company_id: companyId,
+                    truck_id: truckId,
+                    intakeFileUrl: formData.intakeFileUrl || null
+                };
                 const response = await fetch('/api/appointments/metrology', {
                     method: 'POST',
                     headers: {
@@ -85,17 +214,15 @@ export default function MetrologyAppointment() {
                     },
                     body: JSON.stringify(formDataToSubmit),
                 });
-                
                 const data = await response.json();
-                
                 if (data.success) {
-                    // Show success message
                     setSubmissionStatus({
                         success: true,
                         message: 'Your appointment has been scheduled successfully!',
                         appointmentId: data.appointmentId
                     });
-                    // Reset form
+                    setSuccessMessage('Your appointment has been scheduled successfully!');
+                    setShowSuccessModal(true);
                     setFormData({
                         name: '',
                         email: '',
@@ -107,21 +234,20 @@ export default function MetrologyAppointment() {
                         numberOfLiters: '',
                         typeOfTest: 'Volume Standard Test',
                         nameOfSamples: '',
-                        terms: false
+                        terms: false,
+                        intakeFileUrl: null
                     });
                     setSelectedDate(null);
                 } else {
-                    // Show error message
                     setSubmissionStatus({
                         success: false,
                         message: data.message || 'Failed to schedule appointment. Please try again.'
                     });
                 }
             } catch (error) {
-                console.error('Error submitting form:', error);
                 setSubmissionStatus({
                     success: false,
-                    message: 'Network error. Please check your connection and try again.'
+                    message: error.message || 'Network error. Please check your connection and try again.'
                 });
             } finally {
                 setIsSubmitting(false);
@@ -188,6 +314,7 @@ export default function MetrologyAppointment() {
 
     return (
         <div className="min-h-screen bg-gray-50 py-4 sm:py-8">
+            {isSubmitting && <LoadingOverlay message="Submitting your appointment..." />}
             <div className="max-w-[98rem] mx-auto px-4 sm:px-6 lg:px-8">
                 {/* Header */}
                 <div className="flex items-center justify-center gap-2 text-blue-600 mb-2">
@@ -276,35 +403,56 @@ export default function MetrologyAppointment() {
 
                                 <div>
                                     <label className="block text-sm text-gray-700">
-                                        Plate Number
+                                        Sex
                                     </label>
+                                    <select
+                                        name="sex"
+                                        value={formData.sex}
+                                        onChange={handleChange}
+                                        className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.sex ? 'border-red-500' : 'border-gray-300'} rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500`}
+                                    >
+                                        <option value="">Select sex</option>
+                                        <option value="Male">Male</option>
+                                        <option value="Female">Female</option>
+                                    </select>
+                                    {errors.sex && (
+                                        <p className="mt-1 text-sm text-red-600">{errors.sex}</p>
+                                    )}
+                                </div>
+
+                                {/* Company Dropdown */}
+                                <div>
+                                    <label className="block text-sm text-gray-700">Organization Name</label>
+                                    <select
+                                        name="companyName"
+                                        value={formData.companyName}
+                                        onChange={handleChange}
+                                        className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.companyName ? 'border-red-500' : 'border-gray-300'} rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500`}
+                                    >
+                                        <option value="">Select a verified company</option>
+                                        {verifiedCompanies.map(company => (
+                                            <option key={company.id} value={company.name}>{company.name}</option>
+                                        ))}
+                                    </select>
+                                    {errors.companyName && (
+                                        <p className="mt-1 text-sm text-red-600">{errors.companyName}</p>
+                                    )}
+                                </div>
+
+                                {/* Truck Dropdown */}
+                                <div>
+                                    <label className="block text-sm text-gray-700">Plate Number</label>
                                     <input
                                         type="text"
                                         name="plateNumber"
                                         value={formData.plateNumber}
                                         onChange={handleChange}
-                                        placeholder="XXX-000"
+                                        placeholder="Enter plate number"
                                         className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.plateNumber ? 'border-red-500' : 'border-gray-300'} rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500`}
+                                        disabled={!formData.companyName}
                                     />
                                     {errors.plateNumber && (
                                         <p className="mt-1 text-sm text-red-600">{errors.plateNumber}</p>
-                                    )}
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm text-gray-700">
-                                        Company / Organization
-                                    </label>
-                                    <input
-                                        type="text"
-                                        name="companyName"
-                                        value={formData.companyName}
-                                        onChange={handleChange}
-                                        placeholder="Enter organization name"
-                                        className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.companyName ? 'border-red-500' : 'border-gray-300'} rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500`}
-                                    />
-                                    {errors.companyName && (
-                                        <p className="mt-1 text-sm text-red-600">{errors.companyName}</p>
                                     )}
                                 </div>
 
@@ -410,7 +558,7 @@ export default function MetrologyAppointment() {
                                             value={formData.numberOfLiters}
                                             onChange={handleChange}
                                             placeholder="Enter number of liters"
-                                            max="80000"
+                                            max={dailyLimit}
                                             className={`block w-full px-3 py-2 bg-white border ${errors.numberOfLiters ? 'border-red-500' : 'border-gray-300'} rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 pr-8`}
                                         />
                                         <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -420,7 +568,7 @@ export default function MetrologyAppointment() {
                                     {errors.numberOfLiters && (
                                         <p className="mt-1 text-sm text-red-600">{errors.numberOfLiters}</p>
                                     )}
-                                    <p className="mt-1 text-xs text-gray-500">Maximum: 80,000 liters</p>
+                                    <p className="mt-1 text-xs text-gray-500">Maximum: {dailyLimit.toLocaleString()} liters</p>
                                 </div>
 
                                 <div>
@@ -450,6 +598,24 @@ export default function MetrologyAppointment() {
                                     />
                                     {errors.sampleDescription && (
                                         <p className="mt-1 text-sm text-red-600">{errors.sampleDescription}</p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm text-gray-700 font-medium mb-1">Intake File (optional)</label>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx,.txt,.csv"
+                                        onChange={handleFileChange}
+                                        className="block w-full text-sm text-gray-700 border border-gray-300 rounded-md file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                        disabled={uploading}
+                                    />
+                                    {uploading && <p className="text-xs text-blue-600 mt-1">Uploading...</p>}
+                                    {uploadError && <p className="text-xs text-red-600 mt-1">{uploadError}</p>}
+                                    {formData.intakeFileUrl && (
+                                        <div className="mt-1 text-xs text-green-700">
+                                            Uploaded: <a href={formData.intakeFileUrl} target="_blank" rel="noopener noreferrer" className="underline">{formData.intakeFileUrl.split('/').pop()}</a>
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -517,6 +683,44 @@ export default function MetrologyAppointment() {
                     )}
                 </div>
             </div>
+
+            {/* Error Modal */}
+            {showErrorModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+                    <div className="bg-white rounded-lg shadow-lg p-8 max-w-sm w-full text-center">
+                        <svg className="mx-auto h-12 w-12 text-red-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <h2 className="text-lg font-semibold text-red-700 mb-2">Error</h2>
+                        <p className="text-gray-700 mb-6">{errorMessage}</p>
+                        <button
+                            onClick={() => setShowErrorModal(false)}
+                            className="bg-red-600 text-white px-6 py-2 rounded-md font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Success Modal */}
+            {showSuccessModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+                    <div className="bg-white rounded-lg shadow-lg p-8 max-w-sm w-full text-center">
+                        <svg className="mx-auto h-12 w-12 text-green-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <h2 className="text-lg font-semibold text-green-700 mb-2">Success!</h2>
+                        <p className="text-gray-700 mb-6">{successMessage}</p>
+                        <button
+                            onClick={() => setShowSuccessModal(false)}
+                            className="bg-green-600 text-white px-6 py-2 rounded-md font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 } 
